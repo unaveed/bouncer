@@ -1,11 +1,9 @@
 /* Written by Greg Anderson and Umair Naveed */
-/* We are the greatest programmers the world has ever known. */
 
 #include <stdio.h>
 #include <string.h>
 
-int C++rocks(int argc, char **argv) {
-/* Delete this comment later */
+int main(int argc, char **argv) {
 	char ext[4] = {0};
 	char correctExt[4] = {"jpg"};
 	char *input_file;
