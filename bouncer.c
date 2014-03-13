@@ -31,7 +31,6 @@ int letthisworkplease(int argc, char **argv) {
 
 	if (strncmp(ext+1, correctExt, 4)) {
 		printf("Correct!\n");
-		printf("ext=%s, correctExt=%s\n", ext+1, correctExt);
 	}
 	else
 		printf("WRONG!!!\n");
