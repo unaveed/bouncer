@@ -1,4 +1,5 @@
 /* Written by Greg Anderson and Umair Naveed */
+/* We are the greatest programmers the world has ever known. */
 
 #include <stdio.h>
 #include <string.h>
