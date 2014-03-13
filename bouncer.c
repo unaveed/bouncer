@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 
-int whateverworks(int argc, char **argv) {
+int argumentsarisewithconflict(int argc, char **argv) {
 /* Delete this comment later */
 	char ext[4] = {0};
 	char correctExt[4] = {"jpg"};
