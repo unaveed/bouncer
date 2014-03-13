@@ -9,10 +9,9 @@ int main(int argc, char **argv) {
 	const char *ext;
 	int result;
 
-	if (argc > 1)
-		printf("argv[1]=%d\n", strlen(argv[1]));
-	else {
-		printf("No arguments supplied.\n");
+	if (argc != 2) {
+		printf("Invalid arguments.\n");
+		// TODO: Print usage message
 		return 1;
 	}
 
