@@ -3,8 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 
-int main(int argc, char **argv) {
-/* Delete this comment later */
+int fileExtensionReader(int argc, char **argv) {
 	char ext[4] = {0};
 	char correctExt[4] = {"jpg"};
 	char *input_file;
