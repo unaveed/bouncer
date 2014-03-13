@@ -5,6 +5,8 @@
 #include <string.h>
 
 int main(int argc, char **argv) {
+/* Delete this comment later */
+	char ext[4] = {0};
 	char correctExt[4] = {"jpg"};
 	char *input_file;
 	const char *ext;
