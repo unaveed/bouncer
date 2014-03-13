@@ -2,8 +2,7 @@
 
 #include <stdio.h>
 #include <string.h>
-
-void usage();
+#include "bouncer.h"
 
 int main(int argc, char **argv) {
 	char correctExt[4] = {"jpg"};
