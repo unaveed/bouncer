@@ -3,6 +3,8 @@
 #include <stdio.h>
 #include <string.h>
 
+void usage();
+
 int main(int argc, char **argv) {
 	char correctExt[4] = {"jpg"};
 	char *input_file;
@@ -11,7 +13,7 @@ int main(int argc, char **argv) {
 	/* Check to make sure correct number of arguments are supplied. */
 	if (argc != 2) {
 		printf("Incorrect number of arguments.\n");
-		// TODO: Print usage message
+		usage();
 		return 1;
 	}
 
@@ -20,9 +22,14 @@ int main(int argc, char **argv) {
 	ext = strrchr(input_file, '.');
     if(!ext || ext == input_file || strncmp(ext+1, correctExt, 4)) {
 		printf("Invalid filetype.\n");
-		// TODO: Print usage message
+		usage();
 		return 1;
 	}
 
 	return 0;
+}
+
+/* Prints the usage message. */
+void usage() {
+	printf("Usage: bouncer <filename.jpg>\n");
 }
