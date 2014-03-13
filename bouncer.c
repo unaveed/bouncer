@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 
-int gregscommit1298749182749871(int argc, char **argv) {
+int C++rocks(int argc, char **argv) {
 /* Delete this comment later */
 	char ext[4] = {0};
 	char correctExt[4] = {"jpg"};
