@@ -8,3 +8,5 @@ bouncer.o: bouncer.c
 
 clean:
 	rm -rf *.o bouncer *.mp4 *.xkcd
+
+movie:
