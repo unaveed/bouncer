@@ -1,12 +1,12 @@
 #include "libavcodec/avcodec.h"
 #include "libavcodec/avfft.h"
-#include "libavcodec/dxva2.h"
+/* #include "libavcodec/dxva2.h" */
 #include "libavcodec/old_codec_ids.h"
 #include "libavcodec/vaapi.h"
-#include "libavcodec/vda.h"
+/* #include "libavcodec/vda.h" */
 #include "libavcodec/vdpau.h"
 #include "libavcodec/version.h"
-#include "libavcodec/xvmc.h"
+/* #include "libavcodec/xvmc.h" */
 
 #include "libavdevice/avdevice.h"
 #include "libavdevice/version.h"
@@ -79,7 +79,7 @@
 #include "libavutil/stereo3d.h"
 #include "libavutil/xtea.h"
 
-#include "libswresample/wresample.h"
+/* #include "libswresample/wresample.h" */
 #include "libswresample/version.h"
 
 #include "libswscale/swscale.h"
