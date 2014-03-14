@@ -1,7 +1,5 @@
 /* Written by Greg Anderson and Umair Naveed */
 
-#include <stdio.h>
-#include <string.h>
 #include "bouncer.h"
 
 int main(int argc, char **argv) {
@@ -18,12 +16,15 @@ int main(int argc, char **argv) {
 
 	input_file = argv[1];	/* Set input file */
 	
+	/* Check filetype */
 	ext = strrchr(input_file, '.');
     if(!ext || ext == input_file || strncmp(ext+1, correctExt, 4)) {
 		printf("Invalid filetype.\n");
 		usage();
 		return 1;
 	}
+
+	printf("AV_CODEC_ID_XKCD=%d\n", AV_CODEC_ID_XKCD);
 
 	return 0;
 }
