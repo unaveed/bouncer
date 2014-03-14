@@ -1,6 +1,11 @@
 /* Written by Greg Anderson and Umair Naveed */
 
+#include <stdio.h>
+#include <string.h>
 #include "bouncer.h"
+
+#include "avcodec.h"
+
 
 int main(int argc, char **argv) {
 	char correctExt[4] = {"jpg"};
@@ -25,6 +30,19 @@ int main(int argc, char **argv) {
 	}
 
 	printf("AV_CODEC_ID_XKCD=%d\n", AV_CODEC_ID_XKCD);
+
+	/*
+	AVFormatContext *pFormatCtx;
+
+	// Open video file
+	if(av_open_input_file(&pFormatCtx, input_file, NULL, 0, NULL)!=0) {
+		printf("ERROR HERE\n");
+		return -1; // Couldn't open file
+	}
+	else {
+		printf("SUCCESS\n");
+	}
+	*/
 
 	return 0;
 }
