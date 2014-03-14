@@ -2,10 +2,8 @@
 
 #include <stdio.h>
 #include <string.h>
+
 #include "bouncer.h"
-
-#include "avcodec.h"
-
 
 int main(int argc, char **argv) {
 	char correctExt[4] = {"jpg"};
