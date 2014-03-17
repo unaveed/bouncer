@@ -11,9 +11,9 @@ CFLAGS += -Wall -g
 CFLAGS := $(shell pkg-config --cflags $(FFMPEG_LIBS)) $(CFLAGS)
 LDLIBS := $(shell pkg-config --libs $(FFMPEG_LIBS)) $(LDLIBS)
 
-EXAMPLES=       bouncer
+FILES= bouncer
 
-OBJS=$(addsuffix .o,$(EXAMPLES))
+OBJS=$(addsuffix .o,$(FILES))
 
 # the following examples make explicit use of the math library
 decoding_encoding: LDLIBS += -lm
@@ -22,10 +22,9 @@ resampling_audio:  LDLIBS += -lm
 
 .phony: all clean-test clean
 
-all: $(OBJS) $(EXAMPLES)
+all: $(OBJS) $(FILES)
 
-clean-test:
-	$(RM) test*.pgm test.h264 test.mp2 test.sw test.mpg
+clean:
+	rm -rf *.o bouncer *.mp4 *.xkcd
 
-clean: clean-test
-	$(RM) $(EXAMPLES) $(OBJS)
+movie:
