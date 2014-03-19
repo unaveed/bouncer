@@ -8,4 +8,3 @@ clean:
 
 movie:
 	ffmpeg -f image2 -i frame%03d.xkcd movie.mp4
-	#ffmpeg -f img2 -i frame%03d.xkcd movie.mp4
