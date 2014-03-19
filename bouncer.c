@@ -1,132 +1,76 @@
-/*
- * Copyright (c) 2014 Stefano Sabatini
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- * THE SOFTWARE.
- */
+#include <stdio.h>
+#include <string.h>
 
-/**
- * @file
- * libavformat AVIOContext API example.
- *
- * Make libavformat demuxer access media content through a custom
- * AVIOContext read callback.
- * @example doc/examples/avio_reading.c
- */
+#include "bouncer.h"
 
-#include "libavcodec/avcodec.h"
-#include "libavformat/avformat.h"
-#include "libavformat/avio.h"
-#include "libavutil/file.h"
+int main(int argc, char **argv) {
+	char correctExt[4] = {"jpg"};
+	char *input_file;
+	const char *ext;
 
-struct buffer_data {
-    uint8_t *ptr;
-    size_t size; ///< size left in the buffer
-};
+	/* Check to make sure correct number of arguments are supplied. */
+	if (argc != 2) {
+		printf("Incorrect number of arguments.\n");
+		usage();
+		return 1;
+	}
 
-static int read_packet(void *opaque, uint8_t *buf, int buf_size)
-{
-    struct buffer_data *bd = (struct buffer_data *)opaque;
-    buf_size = FFMIN(buf_size, bd->size);
+	input_file = argv[1];	/* Set input file */
 
-    printf("ptr:%p size:%zu\n", bd->ptr, bd->size);
+	/* Check filetype */
+	ext = strrchr(input_file, '.');
+	if(!ext || ext == input_file || strncmp(ext+1, correctExt, 4)) {
+		printf("Invalid filetype.\n");
+		usage();
+		return 1;
+	}
+	AVFormatContext *pictureFormatCxt = NULL;
+	AVCodec 		*codec = NULL;
+	AVCodecContext 	*avct= NULL;
+	AVFrame 		*picture = NULL;
+	AVPacket 		avpkt;
+	int				i, picStream, width, height;
+	
+	av_register_all();
+	
+	if(avformat_open_input(&pictureFormatCxt, input_file, NULL, NULL)!=0)
+		return -1;
 
-    /* copy internal buffer data to buf */
-    memcpy(buf, bd->ptr, buf_size);
-    bd->ptr  += buf_size;
-    bd->size -= buf_size;
+	/* Find the JPEG decoder */
+	codec = avcodec_find_decoder(CODEC_ID_JPEGLS);
+	if(!codec){
+		printf("Codec could not be found\n");
+		exit(1);
+	}
 
-    return buf_size;
+	if(avformat_find_stream_info(pictureFormatCxt, NULL)<0)
+		return -1;
+
+	/* May not need */
+	av_dump_format(pictureFormatCxt, 0, input_file, 0);
+
+	picStream = -1;
+	for(i = 0; i<pictureFormatCxt->nb_streams; i++){
+		if(pictureFormatCxt->streams[i]->codec->codec_type==AVMEDIA_TYPE_VIDEO){
+			picStream=i;
+			break;
+		}
+		if(picStream == -1)
+			return -1;
+	}
+	avct = pictureFormatCxt->streams[picStream]->codec;
+	
+	/* See if width or height can be retrieved for the leopard.jpg, delete later  */	
+	width = avct->width;
+	printf("Width should equal 600, actual =  %d\n", width);
+
+	height = avct->height;
+	printf("Height should equal 450, actual =  %d\n", height);
+
+	return 0;
 }
 
-int main(int argc, char *argv[])
-{
-    AVFormatContext *fmt_ctx = NULL;
-    AVIOContext *avio_ctx = NULL;
-    uint8_t *buffer = NULL, *avio_ctx_buffer = NULL;
-    size_t buffer_size, avio_ctx_buffer_size = 4096;
-    char *input_filename = NULL;
-    int ret = 0;
-    struct buffer_data bd = { 0 };
-
-    if (argc != 2) {
-        fprintf(stderr, "usage: %s input_file\n"
-                "API example program to show how to read from a custom buffer "
-                "accessed through AVIOContext.\n", argv[0]);
-        return 1;
-    }
-    input_filename = argv[1];
-
-    /* register codecs and formats and other lavf/lavc components*/
-    av_register_all();
-
-    /* slurp file content into buffer */
-    ret = av_file_map(input_filename, &buffer, &buffer_size, 0, NULL);
-    if (ret < 0)
-        goto end;
-
-    /* fill opaque structure used by the AVIOContext read callback */
-    bd.ptr  = buffer;
-    bd.size = buffer_size;
-
-    if (!(fmt_ctx = avformat_alloc_context())) {
-        ret = AVERROR(ENOMEM);
-        goto end;
-    }
-
-    avio_ctx_buffer = av_malloc(avio_ctx_buffer_size);
-    if (!avio_ctx_buffer) {
-        ret = AVERROR(ENOMEM);
-        goto end;
-    }
-    avio_ctx = avio_alloc_context(avio_ctx_buffer, avio_ctx_buffer_size,
-                                  0, &bd, &read_packet, NULL, NULL);
-    if (!avio_ctx) {
-        ret = AVERROR(ENOMEM);
-        goto end;
-    }
-    fmt_ctx->pb = avio_ctx;
-
-    ret = avformat_open_input(&fmt_ctx, NULL, NULL, NULL);
-    if (ret < 0) {
-        fprintf(stderr, "Could not open input\n");
-        goto end;
-    }
-
-    ret = avformat_find_stream_info(fmt_ctx, NULL);
-    if (ret < 0) {
-        fprintf(stderr, "Could not find stream information\n");
-        goto end;
-    }
-
-    av_dump_format(fmt_ctx, 0, input_filename, 0);
-
-end:
-    avformat_close_input(&fmt_ctx);
-    /* note: the internal buffer could have changed, and be != avio_ctx_buffer */
-    av_freep(&avio_ctx->buffer);
-    av_freep(&avio_ctx);
-    av_file_unmap(buffer, buffer_size);
-
-    if (ret < 0) {
-        fprintf(stderr, "Error occurred: %s\n", av_err2str(ret));
-        return 1;
-    }
-
-    return 0;
+/* Prints the usage message. */
+void usage() {
+	printf("Usage: bouncer <filename.jpg>\n");
 }
