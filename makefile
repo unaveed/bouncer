@@ -1,30 +1,11 @@
-# use pkg-config for getting CFLAGS and LDLIBS
-FFMPEG_LIBS=    libavdevice                        \
-                libavformat                        \
-                libavfilter                        \
-                libavcodec                         \
-                libswresample                      \
-                libswscale                         \
-                libavutil                          \
+all: bouncer
 
-CFLAGS += -Wall -g
-CFLAGS := $(shell pkg-config --cflags $(FFMPEG_LIBS)) $(CFLAGS)
-LDLIBS := $(shell pkg-config --libs $(FFMPEG_LIBS)) $(LDLIBS)
-
-FILES= bouncer
-
-OBJS=$(addsuffix .o,$(FILES))
-
-# the following examples make explicit use of the math library
-decoding_encoding: LDLIBS += -lm
-muxing:            LDLIBS += -lm
-resampling_audio:  LDLIBS += -lm
-
-.phony: all clean-test clean
-
-all: $(OBJS) $(FILES)
+bouncer:
+	gcc -o bouncer -I../ffmpeg/include -L../ffmpeg/lib bouncer.c `pkg-config --cflags --libs libavutil libavformat libavcodec`
 
 clean:
-	rm -rf *.o bouncer *.mp4 *.xkcd
+	rm -rf *.o bouncer *.mp4 *.xkcd *.out
 
 movie:
+	ffmpeg -f image2 -i frame%03d.xkcd movie.mp4
+	#ffmpeg -f img2 -i frame%03d.xkcd movie.mp4
