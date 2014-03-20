@@ -1,45 +1,83 @@
-// tutorial01.c
-//
-// This tutorial was written by Stephen Dranger (dranger@gmail.com).
-//
-// Code based on a tutorial by Martin Bohme (boehme@inb.uni-luebeckREMOVETHIS.de)
-// Tested on Gentoo, CVS version 5/01/07 compiled with GCC 4.1.1
-
-// A small sample program that shows how to use libavformat and libavcodec to
-// read video from a file.
-//
-// Use the Makefile to build all examples.
-//
-// Run using
-//
-// tutorial01 myvideofile.mpg
-//
-// to write the first five frames from "myvideofile.mpg" to disk in PPM
-// format.
-
 #include "libavcodec/avcodec.h"
 #include "libavformat/avformat.h"
 #include "libswscale/swscale.h"
 
 #include <stdio.h>
+#include <math.h>
+
+/*
+ * Fills the first supplied row with the correct pixel data to contain the circle.
+ */
+void get_circle_row_data(uint8_t *tempRow, uint8_t *row, int y, int width, int height, int centerX, int centerY, int radius) {
+	int x;
+	int yBrightness = (y - centerY) / 10;
+
+	for (x = 0; x < width; x++) {
+		if (pow((x - centerX), 2) + pow((y - centerY), 2) < pow(radius, 2)) {
+			tempRow[(x*3)+0] = 255;
+			tempRow[(x*3)+1] = 76;
+			tempRow[(x*3)+2] = 7;
+		}
+		else {
+			tempRow[(x*3)+0] = row[(x*3)+0];
+			tempRow[(x*3)+1] = row[(x*3)+1];
+			tempRow[(x*3)+2] = row[(x*3)+2];
+		}
+	}
+}
 
 void SaveFrame(AVFrame *pFrame, int width, int height, int iFrame) {
 	FILE *pFile;
 	char szFilename[32];
-	int  y;
+	int  y, i;
+	int radius, centerX, centerY;
+	uint8_t tempRow[width*3];
+	uint8_t *row;
+
+	/* Get the radius of the ball */
+	if (height > width)
+		radius = width / 10;
+	else
+		radius = height / 10;
+
+	/* Get the center of the ball */
+	centerX = width / 2;
+	centerY = height / 2;
 
 	// Open file
 	sprintf(szFilename, "frame%d.ppm", iFrame);
 	pFile=fopen(szFilename, "wb");
-	if(pFile==NULL)
+	if(pFile == NULL)
 		return;
 
 	// Write header
 	fprintf(pFile, "P6\n%d %d\n255\n", width, height);
 
 	// Write pixel data
-	for(y=0; y<height; y++)
-		fwrite(pFrame->data[0]+y*pFrame->linesize[0], 1, width*3, pFile);
+	for(y = 0; y < height; y++) {
+		/* If circle data is contained in the row, write it */
+		if (y >= (centerY - radius) && y <= (centerY + radius)) {
+			get_circle_row_data(tempRow,
+								pFrame->data[0]+y*pFrame->linesize[0],
+								y,
+								width, 
+								height, 
+								centerX, 
+								centerY, 
+								radius);
+			fwrite(tempRow, 1, width*3, pFile);
+		}
+		/* Normal picture */
+		else
+			fwrite(pFrame->data[0]+y*pFrame->linesize[0], 1, width*3, pFile);
+
+		/*
+		if (y % 2 == 0)
+			fwrite(green, 1, width*3, pFile);
+		else
+			fwrite(pFrame->data[0]+y*pFrame->linesize[0], 1, width*3, pFile);
+		*/
+	}
 
 	// Close file
 	fclose(pFile);
@@ -55,7 +93,10 @@ int main(int argc, char *argv[]) {
 	AVPacket        packet;
 	int             frameFinished;
 	int             numBytes;
+	int				y, x;
+	uint8_t			r, g, b;
 	uint8_t         *buffer = NULL;
+	uint8_t         *pic = NULL;
 
 	AVDictionary    *optionsDict = NULL;
 	struct SwsContext      *sws_ctx = NULL;
@@ -159,6 +200,28 @@ int main(int argc, char *argv[]) {
 		// Free the packet that was allocated by av_read_frame
 		av_free_packet(&packet);
 	}
+
+	// Read pixel data
+	/*
+	pic = pFrameRGB->data[0];
+	printf("linesize=%d\n", pFrameRGB->linesize[0]);
+	printf("width=%d\n", pCodecCtx->width);
+	printf("height=%d\n", pCodecCtx->height);
+
+	for (y = 0; y < pCodecCtx->height; y++) {
+		for (x = 0; x < pFrameRGB->linesize[0]; x+=3) {
+			r = pic[y * pFrameRGB->linesize[0] + x + 0];
+			g = pic[y * pFrameRGB->linesize[0] + x + 1];
+			b = pic[y * pFrameRGB->linesize[0] + x + 2];
+			if (y == 7) {
+				r = 0;
+				g = 255;
+				b = 0;
+			}
+			printf("pixel:(%d,%d,%d)\n", r, g, b);
+		}
+	}
+	*/
 
 	// Free the RGB image
 	av_free(buffer);
