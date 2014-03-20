@@ -4,33 +4,52 @@
 
 #include <stdio.h>
 #include <math.h>
+#include <stdlib.h>
+
+
 
 /*
  * Fills the first supplied row with the correct pixel data to contain the circle.
  */
 void get_circle_row_data(uint8_t *tempRow, uint8_t *row, int y, int width, int height, int centerX, int centerY, int radius, int colors[]) {
 	int x;
-	int left, right, top, bottom, inc, brightness;
+	int left, right, top, bottom, inc, brightness, level;
+	int yPos, xPos;
 	left   = centerX - radius;
 	right  = centerX + radius;
 	top    = centerY - radius;
 	bottom = centerY + radius;
 	inc = (right - centerX) / radius;
 
-
 	for (x = 0; x < width; x++) {
 		/* Inside the circle */
 		if (pow((x - centerX), 2) + pow((y - centerY), 2) < pow(radius, 2)) {
-			if (x < centerX)
-				brightness = (x - left) / inc; /* Figure out brightness level */
-			else if (x > centerX)
-				brightness = (right - x) / inc; /* Figure out brightness level */
-			else
-				brightness = radius-1;	/* At the center, so 255 */
-				
 
+			// Get y value
+			if (y < centerY)
+				yPos = centerY - y;
+			else
+				yPos = y - centerY;
+
+			// Get x value
+			if (x < centerX)
+				xPos = centerX - x;
+			else
+				xPos = x - centerX;
+
+			// Figure out brightness
+			if (yPos > xPos)
+				brightness = yPos;
+			else if (yPos < xPos)
+				brightness = xPos;
+			else if (yPos == 0 && xPos == 0);
+				// TODO: Figure out what to do here.  Maybe nothing still?
+			else
+				brightness = xPos;
+
+			// Assign colors
 			tempRow[(x*3)+0] = 255;
-			tempRow[(x*3)+1] = colors[brightness];
+			tempRow[(x*3)+1] = colors[radius - brightness];
 			tempRow[(x*3)+2] = 255;
 		}
 		/* Outside the circle */
@@ -42,23 +61,13 @@ void get_circle_row_data(uint8_t *tempRow, uint8_t *row, int y, int width, int h
 	}
 }
 
-void SaveFrame(AVFrame *pFrame, int width, int height, int iFrame) {
+void SaveFrame(AVFrame *pFrame, int width, int height, int iFrame, int centerX, int centerY, int radius) {
 	FILE *pFile;
 	char szFilename[32];
 	int  y, i;
-	int radius, centerX, centerY;
 	uint8_t tempRow[width*3];
 	uint8_t *row;
 
-	/* Get the radius of the ball */
-	if (height > width)
-		radius = width / 10;
-	else
-		radius = height / 10;
-
-	/* Get the center of the ball */
-	centerX = width / 2;
-	centerY = height / 2;
 
 	int colors[radius];	/* Represents the level of colors for the gradient */
 
@@ -67,7 +76,7 @@ void SaveFrame(AVFrame *pFrame, int width, int height, int iFrame) {
 
 
 	// Open file
-	sprintf(szFilename, "frame%d.ppm", iFrame);
+	sprintf(szFilename, "frame%.03d.ppm", iFrame);
 	pFile = fopen(szFilename, "wb");
 	if(pFile == NULL)
 		return;
@@ -120,6 +129,7 @@ int main(int argc, char *argv[]) {
 	uint8_t			r, g, b;
 	uint8_t         *buffer = NULL;
 	uint8_t         *pic = NULL;
+	int				centerX, centerY, radius, bottom, parts, ballBounceInc, ballPos, distance, updown;
 
 	AVDictionary    *optionsDict = NULL;
 	struct SwsContext      *sws_ctx = NULL;
@@ -214,37 +224,52 @@ int main(int argc, char *argv[]) {
 					pFrameRGB->data,
 					pFrameRGB->linesize);
 
-				// Save the frame to disk
-				if(++i<=5)
-					SaveFrame(pFrameRGB, pCodecCtx->width, pCodecCtx->height, i);
+				
+				centerX = pCodecCtx->width/2;
+				centerY = pCodecCtx->height/2;
+
+				/* Get the radius of the ball */
+				if (pCodecCtx->height > pCodecCtx->width)
+					radius = pCodecCtx->width / 10;
+				else
+					radius = pCodecCtx->height / 10;
+
+				bottom = centerY + radius;
+
+				parts = 15;
+
+				distance = pCodecCtx->height - bottom;
+				ballBounceInc = distance / parts;
+
+				ballPos = 0;
+				updown = 0;
+				// Save the frames to disk
+				for (i = 0; i < 300; i++) {
+					if (!updown) {
+						if (ballPos < distance)
+							ballPos += ballBounceInc;
+						else {
+							updown = 1;
+							ballPos -= ballBounceInc;
+						}
+					}
+					else {
+						if (ballPos > 0)
+							ballPos -= ballBounceInc;
+						else {
+							updown = 0;
+							ballPos += ballBounceInc;
+						}
+					}
+					SaveFrame(pFrameRGB, pCodecCtx->width, pCodecCtx->height, i, centerX, centerY+ballPos, radius);
+
+				}
 			}
 		}
 
 		// Free the packet that was allocated by av_read_frame
 		av_free_packet(&packet);
 	}
-
-	// Read pixel data
-	/*
-	pic = pFrameRGB->data[0];
-	printf("linesize=%d\n", pFrameRGB->linesize[0]);
-	printf("width=%d\n", pCodecCtx->width);
-	printf("height=%d\n", pCodecCtx->height);
-
-	for (y = 0; y < pCodecCtx->height; y++) {
-		for (x = 0; x < pFrameRGB->linesize[0]; x+=3) {
-			r = pic[y * pFrameRGB->linesize[0] + x + 0];
-			g = pic[y * pFrameRGB->linesize[0] + x + 1];
-			b = pic[y * pFrameRGB->linesize[0] + x + 2];
-			if (y == 7) {
-				r = 0;
-				g = 255;
-				b = 0;
-			}
-			printf("pixel:(%d,%d,%d)\n", r, g, b);
-		}
-	}
-	*/
 
 	// Free the RGB image
 	av_free(buffer);
