@@ -129,7 +129,16 @@ int main(int argc, char *argv[]) {
 	uint8_t			r, g, b;
 	uint8_t         *buffer = NULL;
 	uint8_t         *pic = NULL;
-	int				centerX, centerY, radius, bottom, parts, ballBounceInc, ballPos, distance, updown;
+	/*
+	 * centerX, centerY = center of the ball
+	 * radius = radius of the ball
+	 * bottom = bottom y value of the ball
+	 * parts = how many parts to break the bouncing into (for example, 12 parts would mean 12 frames for falling down, 12 frames to bounce back up)
+	 * ballBounceInc = the actual value to increment by for the bouncing to occur
+	 * distance = distance between the bottom part of the ball (bottom) and the bottom of the image
+	 * down = true if ball if falling down, false if it is bouncing up
+	 */
+	int				centerX, centerY, radius, bottom, parts, ballBounceInc, ballPos, distance, down;
 
 	AVDictionary    *optionsDict = NULL;
 	struct SwsContext      *sws_ctx = NULL;
@@ -242,14 +251,14 @@ int main(int argc, char *argv[]) {
 				ballBounceInc = distance / parts;
 
 				ballPos = 0;
-				updown = 0;
+				down = 0;
 				// Save the frames to disk
 				for (i = 0; i < 300; i++) {
-					if (!updown) {
+					if (down) {
 						if (ballPos < distance)
 							ballPos += ballBounceInc;
 						else {
-							updown = 1;
+							down = 0;
 							ballPos -= ballBounceInc;
 						}
 					}
@@ -257,12 +266,11 @@ int main(int argc, char *argv[]) {
 						if (ballPos > 0)
 							ballPos -= ballBounceInc;
 						else {
-							updown = 0;
+							down = 1;
 							ballPos += ballBounceInc;
 						}
 					}
 					SaveFrame(pFrameRGB, pCodecCtx->width, pCodecCtx->height, i, centerX, centerY+ballPos, radius);
-
 				}
 			}
 		}
