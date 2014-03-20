@@ -8,16 +8,32 @@
 /*
  * Fills the first supplied row with the correct pixel data to contain the circle.
  */
-void get_circle_row_data(uint8_t *tempRow, uint8_t *row, int y, int width, int height, int centerX, int centerY, int radius) {
+void get_circle_row_data(uint8_t *tempRow, uint8_t *row, int y, int width, int height, int centerX, int centerY, int radius, int colors[]) {
 	int x;
-	int yBrightness = (y - centerY) / 10;
+	int left, right, top, bottom, inc, brightness;
+	left   = centerX - radius;
+	right  = centerX + radius;
+	top    = centerY - radius;
+	bottom = centerY + radius;
+	inc = (right - centerX) / radius;
+
 
 	for (x = 0; x < width; x++) {
+		/* Inside the circle */
 		if (pow((x - centerX), 2) + pow((y - centerY), 2) < pow(radius, 2)) {
+			if (x < centerX)
+				brightness = (x - left) / inc; /* Figure out brightness level */
+			else if (x > centerX)
+				brightness = (right - x) / inc; /* Figure out brightness level */
+			else
+				brightness = radius-1;	/* At the center, so 255 */
+				
+
 			tempRow[(x*3)+0] = 255;
-			tempRow[(x*3)+1] = 76;
-			tempRow[(x*3)+2] = 7;
+			tempRow[(x*3)+1] = colors[brightness];
+			tempRow[(x*3)+2] = 255;
 		}
+		/* Outside the circle */
 		else {
 			tempRow[(x*3)+0] = row[(x*3)+0];
 			tempRow[(x*3)+1] = row[(x*3)+1];
@@ -44,9 +60,15 @@ void SaveFrame(AVFrame *pFrame, int width, int height, int iFrame) {
 	centerX = width / 2;
 	centerY = height / 2;
 
+	int colors[radius];	/* Represents the level of colors for the gradient */
+
+	for (i = 0; i < radius; i++)
+		colors[i] = i * (255 / radius);
+
+
 	// Open file
 	sprintf(szFilename, "frame%d.ppm", iFrame);
-	pFile=fopen(szFilename, "wb");
+	pFile = fopen(szFilename, "wb");
 	if(pFile == NULL)
 		return;
 
@@ -64,7 +86,8 @@ void SaveFrame(AVFrame *pFrame, int width, int height, int iFrame) {
 								height, 
 								centerX, 
 								centerY, 
-								radius);
+								radius,
+								colors);
 			fwrite(tempRow, 1, width*3, pFile);
 		}
 		/* Normal picture */
