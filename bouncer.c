@@ -7,19 +7,24 @@
 #include <stdlib.h>
 
 
-
 /*
- * Fills the first supplied row with the correct pixel data to contain the circle.
+ * Fills the supplied row with the correct pixel data to contain the circle.
  */
 void get_circle_row_data(uint8_t *row, int y, int width, int height, int centerX, int centerY, int radius, int colors[]) {
-	int x;
-	int left, right, top, bottom, inc, brightness, level;
-	int yPos, xPos;
+	/*
+	 * x = column
+	 * left = left edge of ball
+	 * right = right edge of ball
+	 * bottom = bottom edge of ball
+	 * brightness = value to use for color (with the gradient)
+	 * yPos = y value of pixel we are looking at with respect to the center
+	 * xPos = x value of pixel we are looking at with respect to the center
+	 */
+	int x, left, right, top, bottom, brightness, yPos, xPos;
 	left   = centerX - radius;
 	right  = centerX + radius;
 	top    = centerY - radius;
 	bottom = centerY + radius;
-	inc = (right - centerX) / radius;
 
 	for (x = 0; x < width; x++) {
 		/* Inside the circle */
@@ -43,7 +48,6 @@ void get_circle_row_data(uint8_t *row, int y, int width, int height, int centerX
 			else if (yPos < xPos)
 				brightness = xPos;
 			else if (yPos == 0 && xPos == 0);
-				// TODO: Figure out what to do here.  Maybe nothing still?
 			else
 				brightness = xPos;
 
@@ -55,15 +59,17 @@ void get_circle_row_data(uint8_t *row, int y, int width, int height, int centerX
 	}
 }
 
-void SaveFrame(AVFrame *pFrame, int width, int height, int iFrame, int centerX, int centerY, int radius) {
+/*
+ * Figures out where the circle should be drawn and takes care of drawing it.
+ */
+void draw_circle(AVFrame *pFrame, int width, int height, int iFrame, int centerX, int centerY, int radius) {
 	int  y, i;
 	uint8_t row[width*3];
-
 	int colors[radius];	/* Represents the level of colors for the gradient */
 
+	/* Set up color levels */
 	for (i = 0; i < radius; i++)
 		colors[i] = i * (255 / radius);
-
 
 	// Write pixel data
 	for(y = 0; y < height; y++) {
@@ -89,26 +95,22 @@ int main(int argc, char *argv[]) {
 	AVCodec         *pCodec = NULL;
 	AVFrame         *pFrame = NULL; 
 	AVFrame         *pFrameRGB = NULL;
-	AVFrame			*tempFrame = NULL;
 	AVPacket        packet;
 	int             frameFinished;
 	int             numBytes, size, ret;
-	int				y, x;
+	int				x, y;
 	uint8_t			r, g, b;
 	uint8_t         *buffer = NULL;
-	uint8_t			*outbuf;
-	uint8_t         *pic = NULL;
-	AVFrame         *tempframe = NULL;
-	int				tempnumBytes = 0;
-	uint8_t			*tempbuffer = NULL;
+	AVFrame         *xkcd_frame = NULL;
 	AVPacket		pkt;
-	AVCodec			*tempcodec = NULL;
+	AVCodec			*xkcd_codec = NULL;
 	int				got_output = 0;
 	char			filename[32];
 	FILE			*f;
-	AVCodecContext	*tempctx;
+	AVCodecContext	*xkcd_ctx;
 	const char *ext;
 	char correctExt[4] = {"jpg"};
+
 	/*
 	 * centerX, centerY = center of the ball
 	 * radius = radius of the ball
@@ -128,9 +130,10 @@ int main(int argc, char *argv[]) {
 		return -1;
 	}
 
+	/* Check file extension */
 	ext = strrchr(argv[1], '.');
 	if(!ext || ext == argv[1] || strncmp(ext+1, correctExt, 4)){
-		printf("Invalid file type, please select a JPEG file.\n");
+		printf("Invalid file type, please select a .jpg file.\n");
 		return -1;
 	}
 
@@ -167,6 +170,7 @@ int main(int argc, char *argv[]) {
 		fprintf(stderr, "Unsupported codec!\n");
 		return -1; // Codec not found
 	}
+
 	// Open codec
 	if(avcodec_open2(pCodecCtx, pCodec, &optionsDict)<0)
 		return -1; // Could not open codec
@@ -200,8 +204,7 @@ int main(int argc, char *argv[]) {
 	// of AVPicture
 	avpicture_fill((AVPicture *)pFrameRGB, buffer, PIX_FMT_RGB24, pCodecCtx->width, pCodecCtx->height);
 
-	// Read frames and save first five frames to disk
-	i=0;
+	// Read frames
 	while(av_read_frame(pFormatCtx, &packet)>=0) {
 		// Is this a packet from the video stream?
 		if(packet.stream_index==videoStream) {
@@ -223,6 +226,7 @@ int main(int argc, char *argv[]) {
 			}
 			sws_freeContext(sws_ctx);
 				
+			/* Get center of ball */
 			centerX = pCodecCtx->width/2;
 			centerY = pCodecCtx->height/2;
 
@@ -232,9 +236,9 @@ int main(int argc, char *argv[]) {
 			else
 				radius = pCodecCtx->height / 10;
 
-			bottom = centerY + radius;
+			bottom = centerY + radius; /* Bottom edge of ball */
 
-			parts = 15;
+			parts = 15;	/* Number of frames till the ball hits the bottom (or top, for that matter) */
 
 			distance = pCodecCtx->height - bottom;
 			ballBounceInc = distance / parts;
@@ -244,15 +248,14 @@ int main(int argc, char *argv[]) {
 				
 			// Save the frames to disk
 			for (i = 0; i < 300; i++) {
+				xkcd_codec = avcodec_find_encoder(AV_CODEC_ID_XKCD);
+				xkcd_ctx = avcodec_alloc_context3(xkcd_codec);
 
-				tempcodec = avcodec_find_encoder(AV_CODEC_ID_XKCD);
-				tempctx = avcodec_alloc_context3(tempcodec);
+				xkcd_ctx->width = pCodecCtx->width;
+				xkcd_ctx->height = pCodecCtx->height;
+				xkcd_ctx->pix_fmt = xkcd_codec->pix_fmts[0];
 
-				tempctx->width = pCodecCtx->width;
-				tempctx->height = pCodecCtx->height;
-				tempctx->pix_fmt = tempcodec->pix_fmts[0];
-
-				if(avcodec_open2(tempctx, tempcodec, NULL) < 0){
+				if(avcodec_open2(xkcd_ctx, xkcd_codec, NULL) < 0){
 					fprintf(stderr, "Could not open codec\n");
 					exit(1);
 				}
@@ -261,12 +264,12 @@ int main(int argc, char *argv[]) {
 				sprintf(filename, "frame%.03d.xkcd", i); 
 				f = fopen(filename, "wb");
 
-				tempframe = av_frame_alloc(); 
-				tempframe->format = tempctx->pix_fmt;
-				tempframe->width = tempctx->width;
-				tempframe->height = tempctx->height;
+				xkcd_frame = av_frame_alloc(); 
+				xkcd_frame->format = xkcd_ctx->pix_fmt;
+				xkcd_frame->width = xkcd_ctx->width;
+				xkcd_frame->height = xkcd_ctx->height;
 
-				ret = av_image_alloc(tempframe->data, tempframe->linesize, tempctx->width, tempctx->height, tempctx->pix_fmt,32);
+				ret = av_image_alloc(xkcd_frame->data, xkcd_frame->linesize, xkcd_ctx->width, xkcd_ctx->height, xkcd_ctx->pix_fmt,32);
 				if(ret <  0){
 					fprintf(stderr, "Could not allocate raw picture buffer\n");
 					exit(1);
@@ -282,12 +285,11 @@ int main(int argc, char *argv[]) {
 				/* Prepare dummy image */
 				for (y = 0; y < pCodecCtx->height; y++){
 					for(x = 0; x < pCodecCtx->width * 3; x++){
-						tempframe->data[0][y * tempframe->linesize[0] + x] = pFrameRGB->data[0][y * pFrameRGB->linesize[0] + x];
+						xkcd_frame->data[0][y * xkcd_frame->linesize[0] + x] = pFrameRGB->data[0][y * pFrameRGB->linesize[0] + x];
 					}
 				}
-				/*tempframe->pts = i; */
 
-
+				/* Figure out where to move the ball and move it */
 				if (down) {
 					if (ballPos < distance)
 						ballPos += ballBounceInc;
@@ -305,10 +307,10 @@ int main(int argc, char *argv[]) {
 					}
 				}
 
-				SaveFrame(tempframe, tempctx->width, tempctx->height, i, centerX, centerY+ballPos, radius); 
+				draw_circle(xkcd_frame, xkcd_ctx->width, xkcd_ctx->height, i, centerX, centerY+ballPos, radius); 
 				
 				/* Encode the image */
-				ret = avcodec_encode_video2(tempctx, &pkt, tempframe, &got_output);
+				ret = avcodec_encode_video2(xkcd_ctx, &pkt, xkcd_frame, &got_output);
 				
 				if(ret < 0){
 					fprintf(stderr, "Error encoding the iamge\n");
@@ -319,10 +321,10 @@ int main(int argc, char *argv[]) {
 					av_free_packet(&pkt);
 				}
 
-				avcodec_close(tempctx);
-				av_free(tempctx);
-				av_freep(&tempframe->data[0]);
-				av_frame_free(&tempframe);
+				avcodec_close(xkcd_ctx);
+				av_free(xkcd_ctx);
+				av_freep(&xkcd_frame->data[0]);
+				av_frame_free(&xkcd_frame);
 
 				// Close file
 				fclose(f);
@@ -338,7 +340,7 @@ int main(int argc, char *argv[]) {
 	av_free(buffer);
 	av_free(pFrameRGB);
 
-	// Free the YUV frame
+	// Free the frame
 	av_free(pFrame);
 
 	// Close the codec
