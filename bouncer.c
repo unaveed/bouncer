@@ -107,6 +107,8 @@ int main(int argc, char *argv[]) {
 	char			filename[32];
 	FILE			*f;
 	AVCodecContext	*tempctx;
+	const char *ext;
+	char correctExt[4] = {"jpg"};
 	/*
 	 * centerX, centerY = center of the ball
 	 * radius = radius of the ball
@@ -125,6 +127,13 @@ int main(int argc, char *argv[]) {
 		printf("Please provide a movie file\n");
 		return -1;
 	}
+
+	ext = strrchr(argv[1], '.');
+	if(!ext || ext == argv[1] || strncmp(ext+1, correctExt, 4)){
+		printf("Invalid file type, please select a JPEG file.\n");
+		return -1;
+	}
+
 	// Register all formats and codecs
 	av_register_all();
 
