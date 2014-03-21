@@ -11,7 +11,7 @@
 /*
  * Fills the first supplied row with the correct pixel data to contain the circle.
  */
-void get_circle_row_data(uint8_t *tempRow, uint8_t *row, int y, int width, int height, int centerX, int centerY, int radius, int colors[]) {
+void get_circle_row_data(uint8_t *row, int y, int width, int height, int centerX, int centerY, int radius, int colors[]) {
 	int x;
 	int left, right, top, bottom, inc, brightness, level;
 	int yPos, xPos;
@@ -48,26 +48,48 @@ void get_circle_row_data(uint8_t *tempRow, uint8_t *row, int y, int width, int h
 				brightness = xPos;
 
 			// Assign colors
-			tempRow[(x*3)+0] = 255;
-			tempRow[(x*3)+1] = colors[radius - brightness];
-			tempRow[(x*3)+2] = 255;
-		}
-		/* Outside the circle */
-		else {
-			tempRow[(x*3)+0] = row[(x*3)+0];
-			tempRow[(x*3)+1] = row[(x*3)+1];
-			tempRow[(x*3)+2] = row[(x*3)+2];
+			row[(x*3)+0] = 255;
+			row[(x*3)+1] = colors[radius - brightness];
+			row[(x*3)+2] = 255;
 		}
 	}
 }
 
-void SaveFrame(AVFrame *pFrame, int width, int height, int iFrame, int centerX, int centerY, int radius) {
+void SaveFrame(AVFrame *pFrameRGB, AVCodecContext *pCodecCtx, int iFrame, int centerX, int centerY, int radius) {
 	FILE *pFile;
 	char szFilename[32];
-	int  y, i;
-	uint8_t tempRow[width*3];
-	uint8_t *row;
+	int  y, i, numBytes, width, height, got_packet;
+	uint8_t row[pCodecCtx->width*3];
+	uint8_t *buffer = NULL;
+	struct SwsContext *sws_ctx = NULL;
+	AVPacket pkt;
+	AVFrame *pFrame = NULL;
+	AVCodec *codec;
 
+	width = pCodecCtx->width;
+	height = pCodecCtx->height;
+
+	pFrame=av_frame_alloc();
+
+	numBytes=avpicture_get_size(PIX_FMT_RGB24, pCodecCtx->width, pCodecCtx->height);
+	buffer=(uint8_t *)av_malloc(numBytes*sizeof(uint8_t));
+
+	sws_ctx = sws_getContext (
+				pCodecCtx->width,
+				pCodecCtx->height,
+				PIX_FMT_RGB24,
+				pCodecCtx->width,
+				pCodecCtx->height,
+				PIX_FMT_RGB24,
+				SWS_BILINEAR,
+				NULL,
+				NULL,
+				NULL);
+	
+	avpicture_fill((AVPicture *)pFrame, buffer, PIX_FMT_RGB24, pCodecCtx->width, pCodecCtx->height);
+
+	sws_scale(sws_ctx, (uint8_t const * const *)pFrameRGB->data, pFrameRGB->linesize, 0, pCodecCtx->height, pFrame->data, pFrame->linesize);
+	sws_freeContext(sws_ctx);
 
 	int colors[radius];	/* Represents the level of colors for the gradient */
 
@@ -75,21 +97,11 @@ void SaveFrame(AVFrame *pFrame, int width, int height, int iFrame, int centerX, 
 		colors[i] = i * (255 / radius);
 
 
-	// Open file
-	sprintf(szFilename, "frame%.03d.ppm", iFrame);
-	pFile = fopen(szFilename, "wb");
-	if(pFile == NULL)
-		return;
-
-	// Write header
-	fprintf(pFile, "P6\n%d %d\n255\n", width, height);
-
 	// Write pixel data
 	for(y = 0; y < height; y++) {
 		/* If circle data is contained in the row, write it */
 		if (y >= (centerY - radius) && y <= (centerY + radius)) {
-			get_circle_row_data(tempRow,
-								pFrame->data[0]+y*pFrame->linesize[0],
+			get_circle_row_data(pFrame->data[0]+y*pFrame->linesize[0],
 								y,
 								width, 
 								height, 
@@ -97,19 +109,19 @@ void SaveFrame(AVFrame *pFrame, int width, int height, int iFrame, int centerX, 
 								centerY, 
 								radius,
 								colors);
-			fwrite(tempRow, 1, width*3, pFile);
 		}
-		/* Normal picture */
-		else
-			fwrite(pFrame->data[0]+y*pFrame->linesize[0], 1, width*3, pFile);
-
-		/*
-		if (y % 2 == 0)
-			fwrite(green, 1, width*3, pFile);
-		else
-			fwrite(pFrame->data[0]+y*pFrame->linesize[0], 1, width*3, pFile);
-		*/
 	}
+
+	pkt.size = 0;
+	pkt.data = NULL;
+	codec = avcodec_find_encoder(AV_CODEC_ID_XKCD);
+	pCodecCtx->codec = codec;
+	avcodec_encode_video2(pCodecCtx, &pkt, pFrame, &got_packet);
+
+	// Open file
+	sprintf(szFilename, "frame%.03d.xkcd", iFrame);
+	pFile = fopen(szFilename, "wb");
+	fwrite(pkt.data, 1, pkt.size, pFile);
 
 	// Close file
 	fclose(pFile);
@@ -122,6 +134,7 @@ int main(int argc, char *argv[]) {
 	AVCodec         *pCodec = NULL;
 	AVFrame         *pFrame = NULL; 
 	AVFrame         *pFrameRGB = NULL;
+	AVFrame			*tempFrame = NULL;
 	AVPacket        packet;
 	int             frameFinished;
 	int             numBytes;
@@ -233,45 +246,47 @@ int main(int argc, char *argv[]) {
 					pFrameRGB->data,
 					pFrameRGB->linesize);
 
+			}
+			sws_freeContext(sws_ctx);
 				
-				centerX = pCodecCtx->width/2;
-				centerY = pCodecCtx->height/2;
+			centerX = pCodecCtx->width/2;
+			centerY = pCodecCtx->height/2;
 
-				/* Get the radius of the ball */
-				if (pCodecCtx->height > pCodecCtx->width)
-					radius = pCodecCtx->width / 10;
-				else
-					radius = pCodecCtx->height / 10;
+			/* Get the radius of the ball */
+			if (pCodecCtx->height > pCodecCtx->width)
+				radius = pCodecCtx->width / 10;
+			else
+				radius = pCodecCtx->height / 10;
 
-				bottom = centerY + radius;
+			bottom = centerY + radius;
 
-				parts = 15;
+			parts = 15;
 
-				distance = pCodecCtx->height - bottom;
-				ballBounceInc = distance / parts;
+			distance = pCodecCtx->height - bottom;
+			ballBounceInc = distance / parts;
 
-				ballPos = 0;
-				down = 0;
-				// Save the frames to disk
-				for (i = 0; i < 300; i++) {
-					if (down) {
-						if (ballPos < distance)
-							ballPos += ballBounceInc;
-						else {
-							down = 0;
-							ballPos -= ballBounceInc;
-						}
-					}
+			ballPos = 0;
+			down = 0;
+			// Save the frames to disk
+			for (i = 0; i < 300; i++) {
+				if (down) {
+					if (ballPos < distance)
+						ballPos += ballBounceInc;
 					else {
-						if (ballPos > 0)
-							ballPos -= ballBounceInc;
-						else {
-							down = 1;
-							ballPos += ballBounceInc;
-						}
+						down = 0;
+						ballPos -= ballBounceInc;
 					}
-					SaveFrame(pFrameRGB, pCodecCtx->width, pCodecCtx->height, i, centerX, centerY+ballPos, radius);
 				}
+				else {
+					if (ballPos > 0)
+						ballPos -= ballBounceInc;
+					else {
+						down = 1;
+						ballPos += ballBounceInc;
+					}
+				}
+
+				SaveFrame(pFrameRGB, pCodecCtx, i, centerX, centerY+ballPos, radius);
 			}
 		}
 
