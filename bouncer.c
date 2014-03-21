@@ -137,6 +137,7 @@ int main(int argc, char *argv[]) {
 		return -1;
 	}
 
+	/* Code example from http://dranger.com/ffmpeg/tutorial01.html */
 	// Register all formats and codecs
 	av_register_all();
 
@@ -225,6 +226,7 @@ int main(int argc, char *argv[]) {
 
 			}
 			sws_freeContext(sws_ctx);
+			/* End example */
 				
 			/* Get center of ball */
 			centerX = pCodecCtx->width/2;
@@ -248,6 +250,7 @@ int main(int argc, char *argv[]) {
 				
 			// Save the frames to disk
 			for (i = 0; i < 300; i++) {
+				/* Code example from ffmpeg/doc/examples/decoding_encoding.c */
 				xkcd_codec = avcodec_find_encoder(AV_CODEC_ID_XKCD);
 				xkcd_ctx = avcodec_alloc_context3(xkcd_codec);
 
@@ -281,6 +284,7 @@ int main(int argc, char *argv[]) {
 				pkt.size = 0;
 
 				fflush(stdout);
+				/* End example */
 
 				/* Prepare dummy image */
 				for (y = 0; y < pCodecCtx->height; y++){
@@ -309,6 +313,7 @@ int main(int argc, char *argv[]) {
 
 				draw_circle(xkcd_frame, xkcd_ctx->width, xkcd_ctx->height, i, centerX, centerY+ballPos, radius); 
 				
+				/* Code example from ffmpeg/doc/examples/decoding_encoding.c */
 				/* Encode the image */
 				ret = avcodec_encode_video2(xkcd_ctx, &pkt, xkcd_frame, &got_output);
 				
@@ -348,6 +353,7 @@ int main(int argc, char *argv[]) {
 
 	// Close the video file
 	avformat_close_input(&pFormatCtx);
+	/* End example */
 
 	return 0;
 }
