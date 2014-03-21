@@ -10,10 +10,11 @@
 
 
 
+
 /*
  * Video encoding example
  */
-static void video_encode_example(const char *filename, int codec_id, int width, int height)
+static void video_encode_example(const char *filename, int codec_id)
 {
     AVCodec *codec;
     AVCodecContext *c= NULL;
@@ -38,12 +39,16 @@ static void video_encode_example(const char *filename, int codec_id, int width, 
         exit(1);
     }
 
+    /* put sample parameters */
+    c->bit_rate = 400000;
     /* resolution must be a multiple of two */
-    c->width = width;
-    c->height = height;
+    c->width = 352;
+    c->height = 288;
+    /* frames per second */
+    c->time_base = (AVRational){1,25};
+    c->gop_size = 10; /* emit one intra frame every ten frames */
     c->max_b_frames = 1;
-    c->pix_fmt = codec->pix_fmts[0];
-
+    c->pix_fmt = AV_PIX_FMT_YUV420P;
 
     if (codec_id == AV_CODEC_ID_H264)
         av_opt_set(c->priv_data, "preset", "slow", 0);
@@ -71,31 +76,68 @@ static void video_encode_example(const char *filename, int codec_id, int width, 
 
     /* the image can be allocated by any means and av_image_alloc() is
      * just the most convenient way if av_malloc() is to be used */
-    ret = av_image_alloc(frame->data, frame->linesize, c->width, c->height, c->pix_fmt, 32);
-
+    ret = av_image_alloc(frame->data, frame->linesize, c->width, c->height,
+                         c->pix_fmt, 32);
     if (ret < 0) {
         fprintf(stderr, "Could not allocate raw picture buffer\n");
         exit(1);
     }
 
     /* encode 1 second of video */
-	av_init_packet(&pkt);
-	pkt.data = NULL;    // packet data will be allocated by the encoder
-	pkt.size = 0;
+    for (i = 0; i < 25; i++) {
+        av_init_packet(&pkt);
+        pkt.data = NULL;    // packet data will be allocated by the encoder
+        pkt.size = 0;
 
+        fflush(stdout);
+        /* prepare a dummy image */
+        /* Y */
+        for (y = 0; y < c->height; y++) {
+            for (x = 0; x < c->width; x++) {
+                frame->data[0][y * frame->linesize[0] + x] = x + y + i * 3;
+            }
+        }
 
-	/* encode the image */
-	ret = avcodec_encode_video2(c, &pkt, frame, &got_output);
-	if (ret < 0) {
-		fprintf(stderr, "Error encoding frame\n");
-		exit(1);
-	}
+        /* Cb and Cr */
+        for (y = 0; y < c->height/2; y++) {
+            for (x = 0; x < c->width/2; x++) {
+                frame->data[1][y * frame->linesize[1] + x] = 128 + y + i * 2;
+                frame->data[2][y * frame->linesize[2] + x] = 64 + x + i * 5;
+            }
+        }
 
-	if (got_output) {
-		printf("Write frame %3d (size=%5d)\n", i, pkt.size);
-		fwrite(pkt.data, 1, pkt.size, f);
-		av_free_packet(&pkt);
-	}
+        frame->pts = i;
+
+        /* encode the image */
+        ret = avcodec_encode_video2(c, &pkt, frame, &got_output);
+        if (ret < 0) {
+            fprintf(stderr, "Error encoding frame\n");
+            exit(1);
+        }
+
+        if (got_output) {
+            printf("Write frame %3d (size=%5d)\n", i, pkt.size);
+            fwrite(pkt.data, 1, pkt.size, f);
+            av_free_packet(&pkt);
+        }
+    }
+
+    /* get the delayed frames */
+    for (got_output = 1; got_output; i++) {
+        fflush(stdout);
+
+        ret = avcodec_encode_video2(c, &pkt, NULL, &got_output);
+        if (ret < 0) {
+            fprintf(stderr, "Error encoding frame\n");
+            exit(1);
+        }
+
+        if (got_output) {
+            printf("Write frame %3d (size=%5d)\n", i, pkt.size);
+            fwrite(pkt.data, 1, pkt.size, f);
+            av_free_packet(&pkt);
+        }
+    }
 
     /* add sequence end code to have a real mpeg file */
     fwrite(endcode, 1, sizeof(endcode), f);
@@ -107,7 +149,6 @@ static void video_encode_example(const char *filename, int codec_id, int width, 
     av_frame_free(&frame);
     printf("\n");
 }
-
 
 
 
@@ -178,9 +219,53 @@ void get_circle_row_data(uint8_t *tempRow, uint8_t *row, int y, int width, int h
 void SaveFrame(AVFrame *pFrame, int width, int height, int iFrame, int centerX, int centerY, int radius) {
 	FILE *pFile;
 	char szFilename[32];
-	int  y, i;
+	int  y, i, got_output;
 	uint8_t tempRow[width*3];
 	uint8_t *row;
+    AVCodec *codec;
+    AVCodecContext *c= NULL;
+    AVPacket pkt;
+
+
+
+
+
+/* *********** NEW WORK *************** */
+
+    /* find the mpeg1 video encoder */
+    codec = avcodec_find_encoder(AV_CODEC_ID_XKCD);
+
+    c = avcodec_alloc_context3(codec);
+
+    /* resolution must be a multiple of two */
+    c->width = width;
+    c->height = height;
+    c->pix_fmt = codec->pix_fmts[0];
+
+    /* open it */
+    avcodec_open2(c, codec, NULL);
+
+	// Open file
+	sprintf(szFilename, "frame%.03d.xkcd", iFrame);
+	pFile = fopen(szFilename, "wb");
+	if(pFile == NULL)
+		return;
+
+    pFrame->format = c->pix_fmt;
+    pFrame->width  = c->width;
+    pFrame->height = c->height;
+
+    av_image_alloc(pFrame->data, pFrame->linesize, c->width, c->height, c->pix_fmt, 32);
+
+	av_init_packet(&pkt);
+	pkt.data = NULL;    // packet data will be allocated by the encoder
+	pkt.size = 0;
+
+
+
+/* *********** END WORK *************** */
+
+
 
 
 	int colors[radius];	/* Represents the level of colors for the gradient */
@@ -189,14 +274,6 @@ void SaveFrame(AVFrame *pFrame, int width, int height, int iFrame, int centerX, 
 		colors[i] = i * (255 / radius);
 
 
-	// Open file
-	sprintf(szFilename, "frame%.03d.ppm", iFrame);
-	pFile = fopen(szFilename, "wb");
-	if(pFile == NULL)
-		return;
-
-	// Write header
-	fprintf(pFile, "P6\n%d %d\n255\n", width, height);
 
 	// Write pixel data
 	for(y = 0; y < height; y++) {
@@ -211,17 +288,28 @@ void SaveFrame(AVFrame *pFrame, int width, int height, int iFrame, int centerX, 
 								centerY, 
 								radius,
 								colors);
-			fwrite(tempRow, 1, width*3, pFile);
+			for (i = 0; i < width*3; i++) {
+				//(pFrame->data[0]+y*pFrame->linesize[0])[i] = tempRow[i];
+			}
+			//fwrite(tempRow, 1, width*3, pFile);
 		}
 		/* Normal picture */
-		else
-			fwrite(pFrame->data[0]+y*pFrame->linesize[0], 1, width*3, pFile);
+		else {
+			//fwrite(pFrame->data[0]+y*pFrame->linesize[0], 1, width*3, pFile);
+		}
 	}
+
+	/* encode the image */
+	avcodec_encode_video2(c, &pkt, pFrame, &got_output);
+
+	fwrite(pkt.data, 1, pkt.size, pFile);
 
 	// Close file
 	fclose(pFile);
 
-	video_encode_example("frame000.ppm", AV_CODEC_ID_XKCD, width, height);
+	av_free_packet(&pkt);
+    avcodec_close(c);
+    av_free(c);
 }
 
 int main(int argc, char *argv[]) {
