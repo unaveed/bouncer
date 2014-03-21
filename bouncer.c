@@ -92,10 +92,11 @@ int main(int argc, char *argv[]) {
 	AVFrame			*tempFrame = NULL;
 	AVPacket        packet;
 	int             frameFinished;
-	int             numBytes;
+	int             numBytes, size, ret;
 	int				y, x;
 	uint8_t			r, g, b;
 	uint8_t         *buffer = NULL;
+	uint8_t			*outbuf;
 	uint8_t         *pic = NULL;
 	AVFrame         *tempframe = NULL;
 	int				tempnumBytes = 0;
@@ -231,52 +232,52 @@ int main(int argc, char *argv[]) {
 
 			ballPos = 0;
 			down = 0;
+				
 			// Save the frames to disk
 			for (i = 0; i < 300; i++) {
+
 				tempcodec = avcodec_find_encoder(AV_CODEC_ID_XKCD);
 				tempctx = avcodec_alloc_context3(tempcodec);
+
 				tempctx->width = pCodecCtx->width;
 				tempctx->height = pCodecCtx->height;
 				tempctx->pix_fmt = tempcodec->pix_fmts[0];
 
-				avcodec_open2(tempctx, tempcodec, NULL);
+				if(avcodec_open2(tempctx, tempcodec, NULL) < 0){
+					fprintf(stderr, "Could not open codec\n");
+					exit(1);
+				}
 
 				// Open file
-				sprintf(filename, "frame%.03d.xkcd", i);
+				sprintf(filename, "frame%.03d.xkcd", i); 
 				f = fopen(filename, "wb");
 
-				tempframe = av_frame_alloc();
-
+				tempframe = av_frame_alloc(); 
 				tempframe->format = tempctx->pix_fmt;
 				tempframe->width = tempctx->width;
 				tempframe->height = tempctx->height;
-				
-				av_image_alloc(tempframe->data, tempframe->linesize, tempctx->width, tempctx->height, tempctx->pix_fmt, 32);
 
+				ret = av_image_alloc(tempframe->data, tempframe->linesize, tempctx->width, tempctx->height, tempctx->pix_fmt,32);
+				if(ret <  0){
+					fprintf(stderr, "Could not allocate raw picture buffer\n");
+					exit(1);
+				}
+
+				/* Initialize packet */
 				av_init_packet(&pkt);
 				pkt.data = NULL;
 				pkt.size = 0;
 
-				avcodec_encode_video2(tempctx, &pkt, tempframe, &got_output);
+				fflush(stdout);
 
-				if (got_output) {
-					fwrite(pkt.data, 1, pkt.size, f);
-					av_free_packet(&pkt);
-				}
-
-				/*
-				tempnumBytes = avpicture_get_size(PIX_FMT_RGB24, tempctx->width, tempctx->height);
-				tempbuffer = (uint8_t *)av_malloc(tempnumBytes*sizeof(uint8_t));
-				*/
-
-
-				for (y = 0; y < tempctx->height; y++) {
-					for (x = 0; x < tempctx->width; x++) {
-						tempframe->data[0][y * tempframe->linesize[0] + x] =  pFrameRGB->data[0][y * pFrameRGB->linesize[0] + x];
+				/* Prepare dummy image */
+				for (y = 0; y < pCodecCtx->height; y++){
+					for(x = 0; x < pCodecCtx->width * 3; x++){
+						tempframe->data[0][y * tempframe->linesize[0] + x] = pFrameRGB->data[0][y * pFrameRGB->linesize[0] + x];
 					}
 				}
+				/*tempframe->pts = i; */
 
-				SaveFrame(tempframe, tempctx->width, tempctx->height, i, centerX, centerY+ballPos, radius);
 
 				if (down) {
 					if (ballPos < distance)
@@ -295,19 +296,24 @@ int main(int argc, char *argv[]) {
 					}
 				}
 
-
-
-
-
-
-
-
+				SaveFrame(tempframe, tempctx->width, tempctx->height, i, centerX, centerY+ballPos, radius); 
+				
+				/* Encode the image */
+				ret = avcodec_encode_video2(tempctx, &pkt, tempframe, &got_output);
+				
+				if(ret < 0){
+					fprintf(stderr, "Error encoding the iamge\n");
+					exit(1);
+				}
+				if(got_output){
+					fwrite(pkt.data, 1, pkt.size, f);
+					av_free_packet(&pkt);
+				}
 
 				avcodec_close(tempctx);
 				av_free(tempctx);
 				av_freep(&tempframe->data[0]);
 				av_frame_free(&tempframe);
-				av_free(tempbuffer);
 
 				// Close file
 				fclose(f);
