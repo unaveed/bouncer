@@ -55,41 +55,9 @@ void get_circle_row_data(uint8_t *row, int y, int width, int height, int centerX
 	}
 }
 
-void SaveFrame(AVFrame *pFrameRGB, AVCodecContext *pCodecCtx, int iFrame, int centerX, int centerY, int radius) {
-	FILE *pFile;
-	char szFilename[32];
-	int  y, i, numBytes, width, height, got_packet;
-	uint8_t row[pCodecCtx->width*3];
-	uint8_t *buffer = NULL;
-	struct SwsContext *sws_ctx = NULL;
-	AVPacket pkt;
-	AVFrame *pFrame = NULL;
-	AVCodec *codec;
-
-	width = pCodecCtx->width;
-	height = pCodecCtx->height;
-
-	pFrame=av_frame_alloc();
-
-	numBytes=avpicture_get_size(PIX_FMT_RGB24, pCodecCtx->width, pCodecCtx->height);
-	buffer=(uint8_t *)av_malloc(numBytes*sizeof(uint8_t));
-
-	sws_ctx = sws_getContext (
-				pCodecCtx->width,
-				pCodecCtx->height,
-				PIX_FMT_RGB24,
-				pCodecCtx->width,
-				pCodecCtx->height,
-				PIX_FMT_RGB24,
-				SWS_BILINEAR,
-				NULL,
-				NULL,
-				NULL);
-	
-	avpicture_fill((AVPicture *)pFrame, buffer, PIX_FMT_RGB24, pCodecCtx->width, pCodecCtx->height);
-
-	sws_scale(sws_ctx, (uint8_t const * const *)pFrameRGB->data, pFrameRGB->linesize, 0, pCodecCtx->height, pFrame->data, pFrame->linesize);
-	sws_freeContext(sws_ctx);
+void SaveFrame(AVFrame *pFrame, int width, int height, int iFrame, int centerX, int centerY, int radius) {
+	int  y, i;
+	uint8_t row[width*3];
 
 	int colors[radius];	/* Represents the level of colors for the gradient */
 
@@ -112,19 +80,6 @@ void SaveFrame(AVFrame *pFrameRGB, AVCodecContext *pCodecCtx, int iFrame, int ce
 		}
 	}
 
-	pkt.size = 0;
-	pkt.data = NULL;
-	codec = avcodec_find_encoder(AV_CODEC_ID_XKCD);
-	pCodecCtx->codec = codec;
-	avcodec_encode_video2(pCodecCtx, &pkt, pFrame, &got_packet);
-
-	// Open file
-	sprintf(szFilename, "frame%.03d.xkcd", iFrame);
-	pFile = fopen(szFilename, "wb");
-	fwrite(pkt.data, 1, pkt.size, pFile);
-
-	// Close file
-	fclose(pFile);
 }
 
 int main(int argc, char *argv[]) {
@@ -142,6 +97,15 @@ int main(int argc, char *argv[]) {
 	uint8_t			r, g, b;
 	uint8_t         *buffer = NULL;
 	uint8_t         *pic = NULL;
+	AVFrame         *tempframe = NULL;
+	int				tempnumBytes = 0;
+	uint8_t			*tempbuffer = NULL;
+	struct SwsContext      *tempsws_ctx = NULL;
+	AVPacket		pkt;
+	AVCodec			*tempcodec = NULL;
+	int				got_packet = 0;
+	char			filename[32];
+	FILE			*pFile;
 	/*
 	 * centerX, centerY = center of the ball
 	 * radius = radius of the ball
@@ -269,6 +233,31 @@ int main(int argc, char *argv[]) {
 			down = 0;
 			// Save the frames to disk
 			for (i = 0; i < 300; i++) {
+
+				tempframe = av_frame_alloc();
+
+				tempnumBytes=avpicture_get_size(PIX_FMT_RGB24, pCodecCtx->width, pCodecCtx->height);
+				tempbuffer=(uint8_t *)av_malloc(tempnumBytes*sizeof(uint8_t));
+
+				tempsws_ctx = sws_getContext (
+							pCodecCtx->width,
+							pCodecCtx->height,
+							PIX_FMT_RGB24,
+							pCodecCtx->width,
+							pCodecCtx->height,
+							PIX_FMT_RGB24,
+							SWS_BILINEAR,
+							NULL,
+							NULL,
+							NULL);
+
+				avpicture_fill((AVPicture *)tempframe, tempbuffer, PIX_FMT_RGB24, pCodecCtx->width, pCodecCtx->height);
+
+				sws_scale(sws_ctx, (uint8_t const * const *)pFrameRGB->data, pFrameRGB->linesize, 0, pCodecCtx->height, tempframe->data, tempframe->linesize);
+				sws_freeContext(sws_ctx);
+
+				SaveFrame(tempframe, pCodecCtx->width, pCodecCtx->height, i, centerX, centerY+ballPos, radius);
+
 				if (down) {
 					if (ballPos < distance)
 						ballPos += ballBounceInc;
@@ -286,16 +275,34 @@ int main(int argc, char *argv[]) {
 					}
 				}
 
-				SaveFrame(pFrameRGB, pCodecCtx, i, centerX, centerY+ballPos, radius);
+				pkt.size = 0;
+				pkt.data = NULL;
+				tempcodec = avcodec_find_encoder(AV_CODEC_ID_XKCD);
+				pCodecCtx->codec = tempcodec;
+				printf("GOT HERE 1\n");
+				avcodec_encode_video2(pCodecCtx, &pkt, tempframe, &got_packet);
+				printf("GOT HERE 2\n");
+
+				// Open file
+				sprintf(filename, "frame%.03d.xkcd", i);
+				pFile = fopen(filename, "wb");
+				fwrite(pkt.data, 1, pkt.size, pFile);
+
+				// Close file
+				fclose(pFile);
+
+				av_free(tempframe);
 			}
 		}
 
 		// Free the packet that was allocated by av_read_frame
 		av_free_packet(&packet);
+		av_free_packet(&pkt);
 	}
 
 	// Free the RGB image
 	av_free(buffer);
+	av_free(tempbuffer);
 	av_free(pFrameRGB);
 
 	// Free the YUV frame
