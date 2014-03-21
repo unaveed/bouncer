@@ -100,12 +100,12 @@ int main(int argc, char *argv[]) {
 	AVFrame         *tempframe = NULL;
 	int				tempnumBytes = 0;
 	uint8_t			*tempbuffer = NULL;
-	struct SwsContext      *tempsws_ctx = NULL;
 	AVPacket		pkt;
 	AVCodec			*tempcodec = NULL;
-	int				got_packet = 0;
+	int				got_output = 0;
 	char			filename[32];
-	FILE			*pFile;
+	FILE			*f;
+	AVCodecContext	*tempctx;
 	/*
 	 * centerX, centerY = center of the ball
 	 * radius = radius of the ball
@@ -233,30 +233,50 @@ int main(int argc, char *argv[]) {
 			down = 0;
 			// Save the frames to disk
 			for (i = 0; i < 300; i++) {
+				tempcodec = avcodec_find_encoder(AV_CODEC_ID_XKCD);
+				tempctx = avcodec_alloc_context3(tempcodec);
+				tempctx->width = pCodecCtx->width;
+				tempctx->height = pCodecCtx->height;
+				tempctx->pix_fmt = tempcodec->pix_fmts[0];
+
+				avcodec_open2(tempctx, tempcodec, NULL);
+
+				// Open file
+				sprintf(filename, "frame%.03d.xkcd", i);
+				f = fopen(filename, "wb");
 
 				tempframe = av_frame_alloc();
 
-				tempnumBytes=avpicture_get_size(PIX_FMT_RGB24, pCodecCtx->width, pCodecCtx->height);
-				tempbuffer=(uint8_t *)av_malloc(tempnumBytes*sizeof(uint8_t));
+				tempframe->format = tempctx->pix_fmt;
+				tempframe->width = tempctx->width;
+				tempframe->height = tempctx->height;
+				
+				av_image_alloc(tempframe->data, tempframe->linesize, tempctx->width, tempctx->height, tempctx->pix_fmt, 32);
 
-				tempsws_ctx = sws_getContext (
-							pCodecCtx->width,
-							pCodecCtx->height,
-							PIX_FMT_RGB24,
-							pCodecCtx->width,
-							pCodecCtx->height,
-							PIX_FMT_RGB24,
-							SWS_BILINEAR,
-							NULL,
-							NULL,
-							NULL);
+				av_init_packet(&pkt);
+				pkt.data = NULL;
+				pkt.size = 0;
 
-				avpicture_fill((AVPicture *)tempframe, tempbuffer, PIX_FMT_RGB24, pCodecCtx->width, pCodecCtx->height);
+				avcodec_encode_video2(tempctx, &pkt, tempframe, &got_output);
 
-				sws_scale(sws_ctx, (uint8_t const * const *)pFrameRGB->data, pFrameRGB->linesize, 0, pCodecCtx->height, tempframe->data, tempframe->linesize);
-				sws_freeContext(sws_ctx);
+				if (got_output) {
+					fwrite(pkt.data, 1, pkt.size, f);
+					av_free_packet(&pkt);
+				}
 
-				SaveFrame(tempframe, pCodecCtx->width, pCodecCtx->height, i, centerX, centerY+ballPos, radius);
+				/*
+				tempnumBytes = avpicture_get_size(PIX_FMT_RGB24, tempctx->width, tempctx->height);
+				tempbuffer = (uint8_t *)av_malloc(tempnumBytes*sizeof(uint8_t));
+				*/
+
+
+				for (y = 0; y < tempctx->height; y++) {
+					for (x = 0; x < tempctx->width; x++) {
+						tempframe->data[0][y * tempframe->linesize[0] + x] =  pFrameRGB->data[0][y * pFrameRGB->linesize[0] + x];
+					}
+				}
+
+				SaveFrame(tempframe, tempctx->width, tempctx->height, i, centerX, centerY+ballPos, radius);
 
 				if (down) {
 					if (ballPos < distance)
@@ -275,23 +295,22 @@ int main(int argc, char *argv[]) {
 					}
 				}
 
-				pkt.size = 0;
-				pkt.data = NULL;
-				tempcodec = avcodec_find_encoder(AV_CODEC_ID_XKCD);
-				pCodecCtx->codec = tempcodec;
-				printf("GOT HERE 1\n");
-				avcodec_encode_video2(pCodecCtx, &pkt, tempframe, &got_packet);
-				printf("GOT HERE 2\n");
 
-				// Open file
-				sprintf(filename, "frame%.03d.xkcd", i);
-				pFile = fopen(filename, "wb");
-				fwrite(pkt.data, 1, pkt.size, pFile);
+
+
+
+
+
+
+
+				avcodec_close(tempctx);
+				av_free(tempctx);
+				av_freep(&tempframe->data[0]);
+				av_frame_free(&tempframe);
+				av_free(tempbuffer);
 
 				// Close file
-				fclose(pFile);
-
-				av_free(tempframe);
+				fclose(f);
 			}
 		}
 
@@ -302,7 +321,6 @@ int main(int argc, char *argv[]) {
 
 	// Free the RGB image
 	av_free(buffer);
-	av_free(tempbuffer);
 	av_free(pFrameRGB);
 
 	// Free the YUV frame
